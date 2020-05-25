@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  build:
+    name: build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macOS-latest]
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/cache@v2
+        name: cache ~/.stack
+        with:
+          path: ~/.stack
+          key: x-${{runner.os}}-stack-${{hashFiles('stack.yaml')}}
+      - uses: actions/cache@v2
+        name: cache .stack-work
+        with:
+          path: |
+            .stack-work
+            parser-typechecker/.stack-work
+            unison-core/.stack-work
+            yaks/easytest/.stack-work
+          key: x-${{runner.os}}-stack_work-${{hashFiles('stack.yaml')}}-${{github.sha}}
+          restore-keys: x-${{runner.os}}-stack_work-${{hashFiles('stack.yaml')}}-
+      - uses: actions/setup-haskell@v1.1
+        name: setup
+        with:
+          ghc-version: "8.8.3"
+          enable-stack: true
+      - name: build dependencies
+        run: stack --no-terminal --system-ghc build --fast --only-dependencies
+      - name: build
+        run: stack --no-terminal --system-ghc build --fast
+      - name: tests
+        run: |
+          git config --global user.name "GitHub Action"
+          stack --no-terminal --system-ghc exec tests
+      - name: transcripts
+        run: |
+          stack --no-terminal --system-ghc exec transcripts
+          git diff
+          x=`git status --porcelain -uno` bash -c 'if [[ -n $x ]]; then echo "$x" && false; fi'
